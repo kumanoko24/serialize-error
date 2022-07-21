@@ -89,13 +89,23 @@ var getErrorConstructor = (name) => error_constructors_default.get(name) ?? Erro
 var destroyCircular = ({
   from,
   seen,
-  to_,
+  to,
   forceEnumerable,
   maxDepth,
   depth,
-  useToJSON
+  useToJSON,
+  serialize
 }) => {
-  const to = to_ ?? (Array.isArray(from) ? [] : {});
+  if (!to) {
+    if (Array.isArray(from)) {
+      to = [];
+    } else if (!serialize && isErrorLike(from)) {
+      const Error2 = getErrorConstructor(from.name);
+      to = new Error2();
+    } else {
+      to = {};
+    }
+  }
   seen.push(from);
   if (depth >= maxDepth) {
     return to;
@@ -103,18 +113,15 @@ var destroyCircular = ({
   if (useToJSON && typeof from.toJSON === "function" && from[toJsonWasCalled] !== true) {
     return toJSON(from);
   }
-  const destroyLocal = (value) => {
-    const Error2 = getErrorConstructor(value.name);
-    return destroyCircular({
-      from: value,
-      seen: [...seen],
-      to_: isErrorLike(value) ? new Error2() : void 0,
-      forceEnumerable,
-      maxDepth,
-      depth,
-      useToJSON
-    });
-  };
+  const continueDestroyCircular = (value) => destroyCircular({
+    from: value,
+    seen: [...seen],
+    forceEnumerable,
+    maxDepth,
+    depth,
+    useToJSON,
+    serialize
+  });
   for (const [key, value] of Object.entries(from)) {
     if (typeof Buffer === "function" && Buffer.isBuffer(value)) {
       to[key] = "[object Buffer]";
@@ -133,7 +140,7 @@ var destroyCircular = ({
     }
     if (!seen.includes(from[key])) {
       depth++;
-      to[key] = destroyLocal(from[key]);
+      to[key] = continueDestroyCircular(from[key]);
       continue;
     }
     to[key] = "[Circular]";
@@ -141,7 +148,7 @@ var destroyCircular = ({
   for (const { property, enumerable } of commonProperties) {
     if (typeof from[property] !== "undefined" && from[property] !== null) {
       Object.defineProperty(to, property, {
-        value: isErrorLike(from[property]) ? destroyLocal(from[property]) : from[property],
+        value: isErrorLike(from[property]) ? continueDestroyCircular(from[property]) : from[property],
         enumerable: forceEnumerable ? true : enumerable,
         configurable: true,
         writable: true
@@ -162,7 +169,8 @@ function serializeError(value, options = {}) {
       forceEnumerable: true,
       maxDepth,
       depth: 0,
-      useToJSON
+      useToJSON,
+      serialize: true
     });
   }
   if (typeof value === "function") {
@@ -175,20 +183,24 @@ function deserializeError(value, options = {}) {
   if (value instanceof Error) {
     return value;
   }
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+  if (isMinimumViableSerializedError(value)) {
     const Error2 = getErrorConstructor(value.name);
     return destroyCircular({
       from: value,
       seen: [],
-      to_: new Error2(),
+      to: new Error2(),
       maxDepth,
-      depth: 0
+      depth: 0,
+      serialize: false
     });
   }
   return new NonError(value);
 }
 function isErrorLike(value) {
-  return value && typeof value === "object" && "name" in value && "message" in value && "stack" in value;
+  return Boolean(value) && typeof value === "object" && "name" in value && "message" in value && "stack" in value;
+}
+function isMinimumViableSerializedError(value) {
+  return Boolean(value) && typeof value === "object" && "message" in value && !Array.isArray(value);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

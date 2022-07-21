@@ -12,11 +12,11 @@
 	},
 	"main": "./index_cjs.js",
 	"engines": {
-		"node": ">=14.16"
+		"node": ">=16.0.0"
 	},
 	"scripts": {
 		"test": "xo && ava && tsd",
-		"build:cjs": "esbuild ./index.js --bundle --platform=node --target=node14 --format=cjs --external:./node_modules/* --outfile=index_cjs.js"
+		"build:cjs": "esbuild ./index.js --bundle --platform=node --target=node16 --format=cjs --external:./node_modules/* --outfile=index_cjs.js"
 	},
 	"files": [
 		"index.js",
